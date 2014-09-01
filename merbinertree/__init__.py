@@ -14,7 +14,7 @@ import hashlib
 def make_MerbinerTree_baseclass(basecls=object):
     class MerbinerTree(basecls):
         """Immutable merklized binary radix tree"""
-        __slots__ = []
+        __slots__ = ['_mt_cached_hash']
 
         _mt_baseclass = None
 
@@ -35,7 +35,16 @@ def make_MerbinerTree_baseclass(basecls=object):
                 return cls.EmptyNodeClass()
 
             else:
-                return cls.from_items(items)
+                leaf_nodes = [cls.FullLeafNodeClass(k, v) for k,v in items]
+                return cls.InnerNodeClass._mt_from_leaf_nodes(leaf_nodes, 0)
+
+        @property
+        def hash(self):
+            try:
+                return self._mt_cached_hash
+            except AttributeError:
+                object.__setattr__(self, '_mt_cached_hash', self.calc_hash_data())
+                return self._mt_cached_hash
 
         @classmethod
         def check_key(cls, key):
@@ -49,12 +58,12 @@ def make_MerbinerTree_baseclass(basecls=object):
             raise NotImplementedError
 
         @classmethod
-        def from_items(cls, items):
-            raise NotImplementedError
-
-        @classmethod
         def key_side(cls, key, depth):
             return key[depth // 8] >> (7 - depth % 8) & 0b1
+
+        def calc_hash_data(self):
+            """Calculate the data that is hashed to produce the node hash"""
+            raise NotImplementedError
 
         def _mt_get(self, keys, depth):
             """Internal implementation of get()"""
@@ -132,6 +141,35 @@ def make_MerbinerTree_baseclass(basecls=object):
                 raise ValueError("Can't merge: trees have different hashes")
             return self._mt_merge(tree, 0)
 
+        def _mt_iter_nodes(self):
+            """Iterate through all nodes in the tree
+
+            Ordering is depth-first: left-node, right-node, then self
+            """
+            yield self
+
+        # FIXME: do we care that what the following return isn't "set-like"?
+        def keys(self):
+            for node in self._mt_iter_nodes():
+                try:
+                    yield node.key
+                except AttributeError:
+                    continue
+
+        def values(self):
+            for node in self._mt_iter_nodes():
+                try:
+                    yield node.value
+                except AttributeError:
+                    continue
+
+        def items(self):
+            for node in self._mt_iter_nodes():
+                try:
+                    yield (node.key, node.value)
+                except AttributeError:
+                    continue
+
     return MerbinerTree
 
 def make_MerbinerTree_class(treecls):
@@ -160,6 +198,10 @@ def make_MerbinerTree_class(treecls):
 
         def _mt_merge(self, tree, depth):
             return tree
+
+        def calc_hash_data(self):
+            """Calculate the data that is hashed to produce the node hash"""
+            return b'\x00'
     treecls.EmptyNodeClass = MerbinerTreeEmptyNodeClass
 
     class MerbinerTreeInnerNodeClass(treecls):
@@ -182,8 +224,12 @@ def make_MerbinerTree_class(treecls):
             object.__setattr__(self, 'right', right)
             return self
 
+        def calc_hash_data(self):
+            """Calculate the data that is hashed to produce the node hash"""
+            return self.left.hash + self.right.hash + b'\x01'
+
         @classmethod
-        def from_leaf_nodes(cls, leaf_nodes, depth):
+        def _mt_from_leaf_nodes(cls, leaf_nodes, depth):
             if len(leaf_nodes) > 1:
                 left_leaves = []
                 right_leaves = []
@@ -194,8 +240,8 @@ def make_MerbinerTree_class(treecls):
                     else:
                         right_leaves.append(leaf_node)
 
-                left = cls.from_leaf_nodes(left_leaves, depth+1)
-                right = cls.from_leaf_nodes(right_leaves, depth+1)
+                left = cls._mt_from_leaf_nodes(left_leaves, depth+1)
+                right = cls._mt_from_leaf_nodes(right_leaves, depth+1)
                 return cls.InnerNodeClass(left, right)
 
             elif len(leaf_nodes) == 1:
@@ -241,6 +287,13 @@ def make_MerbinerTree_class(treecls):
 
         def _mt_merge(self, tree, depth):
             raise NotImplementedError
+
+        def _mt_iter_nodes(self):
+            yield from self.left._mt_iter_nodes()
+            yield from self.right._mt_iter_nodes()
+            yield self
+
+
 
     treecls.InnerNodeClass = MerbinerTreeInnerNodeClass
 
@@ -293,7 +346,7 @@ def make_MerbinerTree_class(treecls):
             else:
                 # Note how the depth is *not* increased by one, as the inner
                 # node is replacing the node at this level.
-                return self.InnerNodeClass.from_leaf_nodes((self, leaf_node), depth)
+                return self.InnerNodeClass._mt_from_leaf_nodes((self, leaf_node), depth)
 
         def _mt_remove(self, key, depth):
             if self.key == key:
@@ -344,6 +397,8 @@ def make_MerbinerTree_class(treecls):
             # do, so return self to avoid unnecessarily creating extra objects.
             return self
 
+        def calc_hash_data(self):
+            return self.calc_value_hash(self.value) + self.key + b'\x02'
 
     treecls.FullLeafNodeClass = MerbinerTreeFullLeafNodeClass
 
@@ -382,8 +437,11 @@ def make_MerbinerTree_class(treecls):
                 # unnecessarily.
                 return self
 
-    treecls.PrunedLeafNodeClass = MerbinerTreePrunedLeafNodeClass
+        def calc_hash_data(self):
+            return self.value_hash + self.key + b'\x02'
 
+
+    treecls.PrunedLeafNodeClass = MerbinerTreePrunedLeafNodeClass
 
     return treecls
 
@@ -401,3 +459,7 @@ class SHA256MerbinerTree(make_MerbinerTree_baseclass()):
     @staticmethod
     def hash_func(data):
         return hashlib.sha256(data).digest()
+
+    @staticmethod
+    def calc_value_hash(value):
+        return hashlib.sha256(value).digest()
