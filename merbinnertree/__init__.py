@@ -1,18 +1,18 @@
 # Copyright (C) 2014 Peter Todd <pete@petertodd.org>
 #
-# This file is part of python-merbinertree.
+# This file is part of python-merbinnertree.
 #
 # It is subject to the license terms in the LICENSE file found in the top-level
 # directory of this distribution.
 #
-# No part of python-merbinertree, including this file, may be copied, modified,
-# propagated, or distributed except according to the terms contained in the
-# LICENSE file.
+# No part of python-merbinnertree, including this file, may be copied,
+# modified, propagated, or distributed except according to the terms contained
+# in the LICENSE file.
 
 import hashlib
 
-def make_MerbinerTree_baseclass(basecls=object):
-    class MerbinerTree(basecls):
+def make_MerbinnerTree_baseclass(basecls=object):
+    class MerbinnerTree(basecls):
         """Immutable merklized binary radix tree"""
         __slots__ = ['_mt_cached_hash']
 
@@ -170,11 +170,11 @@ def make_MerbinerTree_baseclass(basecls=object):
                 except AttributeError:
                     continue
 
-    return MerbinerTree
+    return MerbinnerTree
 
-def make_MerbinerTree_class(treecls):
+def make_MerbinnerTree_class(treecls):
     treecls._mt_baseclass = treecls
-    class MerbinerTreeEmptyNodeClass(treecls):
+    class MerbinnerTreeEmptyNodeClass(treecls):
         __slots__ = []
 
         __instance = None
@@ -202,9 +202,9 @@ def make_MerbinerTree_class(treecls):
         def calc_hash_data(self):
             """Calculate the data that is hashed to produce the node hash"""
             return b'\x00'
-    treecls.EmptyNodeClass = MerbinerTreeEmptyNodeClass
+    treecls.EmptyNodeClass = MerbinnerTreeEmptyNodeClass
 
-    class MerbinerTreeInnerNodeClass(treecls):
+    class MerbinnerTreeInnerNodeClass(treecls):
         __slots__ = ['left', 'right']
         def __new__(cls, left, right):
             # Ensure attempts to create deeper than necessary inner nodes fail
@@ -295,9 +295,9 @@ def make_MerbinerTree_class(treecls):
 
 
 
-    treecls.InnerNodeClass = MerbinerTreeInnerNodeClass
+    treecls.InnerNodeClass = MerbinnerTreeInnerNodeClass
 
-    class MerbinerTreePrunedInnerNodeClass(treecls):
+    class MerbinnerTreePrunedInnerNodeClass(treecls):
         __slots__ = ['pruned_hash']
         def __new__(cls, pruned_hash):
             self = object.__new__(cls)
@@ -326,7 +326,7 @@ def make_MerbinerTree_class(treecls):
                 raise self.PrunedError('update', key, depth)
 
         def _mt_merge(self, tree, depth):
-            if not isinstance(tree, MerbinerTreePrunedInnerNodeClass):
+            if not isinstance(tree, MerbinnerTreePrunedInnerNodeClass):
                 # Other tree is something other than a pruned inner node, so it
                 # must have more information than we do.
                 return tree
@@ -334,9 +334,9 @@ def make_MerbinerTree_class(treecls):
             else:
                 # Otherwise return ourself so that self.merge(tree) is self
                 return self
-    treecls.PrunedInnerNodeClass = MerbinerTreePrunedInnerNodeClass
+    treecls.PrunedInnerNodeClass = MerbinnerTreePrunedInnerNodeClass
 
-    class MerbinerTreeLeafNodeClass(treecls):
+    class MerbinnerTreeLeafNodeClass(treecls):
         __slots__ = ['key']
         def _mt_put(self, leaf_node, depth):
             # FIXME: return self if both are exactly equal
@@ -366,9 +366,9 @@ def make_MerbinerTree_class(treecls):
                 # FIXME: what should key be here?
                 raise self.PrunedError('update', key, depth)
 
-    treecls.LeafNodeClass = MerbinerTreeLeafNodeClass
+    treecls.LeafNodeClass = MerbinnerTreeLeafNodeClass
 
-    class MerbinerTreeFullLeafNodeClass(MerbinerTreeLeafNodeClass):
+    class MerbinnerTreeFullLeafNodeClass(MerbinnerTreeLeafNodeClass):
         __slots__ = ['value']
         def __new__(cls, key, value):
             self = object.__new__(cls)
@@ -400,9 +400,9 @@ def make_MerbinerTree_class(treecls):
         def calc_hash_data(self):
             return self.calc_value_hash(self.value) + self.key + b'\x02'
 
-    treecls.FullLeafNodeClass = MerbinerTreeFullLeafNodeClass
+    treecls.FullLeafNodeClass = MerbinnerTreeFullLeafNodeClass
 
-    class MerbinerTreePrunedLeafNodeClass(MerbinerTreeLeafNodeClass):
+    class MerbinnerTreePrunedLeafNodeClass(MerbinnerTreeLeafNodeClass):
         __slots__ = ['value_hash']
         def __new__(cls, key, value):
             self = object.__new__(cls)
@@ -441,13 +441,13 @@ def make_MerbinerTree_class(treecls):
             return self.value_hash + self.key + b'\x02'
 
 
-    treecls.PrunedLeafNodeClass = MerbinerTreePrunedLeafNodeClass
+    treecls.PrunedLeafNodeClass = MerbinnerTreePrunedLeafNodeClass
 
     return treecls
 
 
-@make_MerbinerTree_class
-class SHA256MerbinerTree(make_MerbinerTree_baseclass()):
+@make_MerbinnerTree_class
+class SHA256MerbinnerTree(make_MerbinnerTree_baseclass()):
     __slots__ = []
     KEYSIZE = 32
 

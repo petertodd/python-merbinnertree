@@ -1,16 +1,17 @@
-python-merbinertree
-===================
+python-merbinnertree
+====================
 
 This Python3 library implements a form of Merklized Binary Radix Tree called a
-"Merbiner Tree". Like a standard merkle tree a Merbiner Tree is a cryptographic
-data structure that securely and efficiently commits a set of items such that
-the existence of a given item in the set can be efficiently proven. Unlike a
-merkle tree these items are key:value pairs, forming a map/dictionary, allowing
-one to also efficently prove that a given key does *not* exist.
+"Merbinner Tree". Like a standard merkle tree a Merbinner Tree is a
+cryptographic data structure that securely and efficiently commits a set of
+items such that the existence of a given item in the set can be efficiently
+proven. Unlike a merkle tree these items are key:value pairs, forming a
+map/dictionary, allowing one to also efficently prove that a given key does
+*not* exist.
 
-Items in a merbiner tree can be efficiently updated and removed, creating a new
-tree. Merbiner trees can also be pruned, resulting in a tree that can prove a
-subset of the operations the unpruned tree can prove.
+Items in a merbinner tree can be efficiently updated and removed, creating a
+new tree. Merbinner trees can also be pruned, resulting in a tree that can
+prove a subset of the operations the unpruned tree can prove.
 
 
 Design Goals
@@ -134,4 +135,4 @@ Contains: key and value
 Unit Tests
 ==========
 
-python3 -m unittest discover -s merbinertree
+python3 -m unittest discover -s merbinnertree
