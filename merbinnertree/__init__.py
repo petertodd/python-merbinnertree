@@ -76,8 +76,6 @@ def make_MerbinnerTree_baseclass(basecls=object):
             """
             raise NotImplementedError
 
-        def prove_existence(self, keys):
-            """Prove the existence or non-existence of one or more keys in the tree"""
 
         def __getitem__(self, key):
             """Return value associated with key"""
@@ -110,6 +108,19 @@ def make_MerbinnerTree_baseclass(basecls=object):
                 return False
             else:
                 return True
+
+        def prove_contains(self, keys, result=None):
+            """Prove the that the tree contains or does not contain one or more keys"""
+            unchecked_keys = keys
+            keys = []
+            for key in unchecked_keys:
+                self.check_key(key)
+                keys.append(key)
+
+            if result is None:
+                result = {}
+            pruned_tree = self._mt_get_keys(result, keys, 0, True)
+            return pruned_tree
 
         def _mt_put_keys(self, changed_keys, items, depth, prove):
             """Internal: change key(s) to specified node(s)
@@ -330,10 +341,14 @@ def make_MerbinnerTree_class(treecls):
                 pruned_right_node = self.right._mt_get_keys(result, right_keys, depth+1, prove)
 
                 if prove:
-                    return self.InnerNodeClass(pruned_left_node, pruned_right_node)
+                    # Make sure that we don't create new objects unnecessarily.
+                    if pruned_left_node is not self.left or pruned_right_node is not self.right:
+                        return self.InnerNodeClass(pruned_left_node, pruned_right_node)
+                    else:
+                        return self
 
             elif prove:
-                return self.PrunedInnerNodeClass.from_inner_node(self)
+                return self.PrunedInnerNodeClass(self.hash)
 
         def _mt_put_keys(self, changed_keys, items, depth, prove):
             if len(items):
@@ -373,7 +388,7 @@ def make_MerbinnerTree_class(treecls):
                     # No items were changed, which means the minimum
                     # information to prove that is the pruned version of
                     # ourselves.
-                    pruned_node = self.PrunedInnerNodeClass.from_inner_node(self)
+                    pruned_node = self.PrunedInnerNodeClass(self.hash)
 
                 return (self, pruned_node)
 
@@ -393,14 +408,11 @@ def make_MerbinnerTree_class(treecls):
     treecls.InnerNodeClass = MerbinnerTreeInnerNodeClass
 
     class MerbinnerTreePrunedInnerNodeClass(treecls):
-        __slots__ = ['pruned_hash']
+        __slots__ = []
         def __new__(cls, pruned_hash):
             self = object.__new__(cls)
-            object.__setattr__(self, 'pruned_hash', pruned_hash)
+            object.__setattr__(self, '_mt_cached_hash', pruned_hash)
             return self
-
-        def _mt_get_keys(self, key, depth):
-            raise self.PrunedError('get', key, depth)
 
         def _mt_get_keys(self, result, keys, depth, ignore_missing=False, prove=False):
             if len(keys):
@@ -444,7 +456,7 @@ def make_MerbinnerTree_class(treecls):
     class MerbinnerTreeLeafNodeClass(treecls):
         __slots__ = ['key']
 
-        def _mt_get_keys_common(self, result, keys, depth, ignore_missing=False, prove=False):
+        def _mt_get_keys_common(self, result, keys, depth, prove):
             found_match = False
             for key in keys:
                 if self.key == key:
@@ -516,8 +528,8 @@ def make_MerbinnerTree_class(treecls):
             object.__setattr__(self, 'value', value)
             return self
 
-        def _mt_get_keys(self, result, keys, depth, ignore_missing=False, prove=False):
-            found_match = self._mt_get_keys_common(result, keys, depth, ignore_missing, prove)
+        def _mt_get_keys(self, result, keys, depth, prove):
+            found_match = self._mt_get_keys_common(result, keys, depth, prove)
             if found_match:
                 return self
 
@@ -550,8 +562,8 @@ def make_MerbinnerTree_class(treecls):
         def from_FullLeafNode(cls, full_leaf_node):
             return cls(full_leaf_node.key, cls.calc_value_hash(full_leaf_node.value))
 
-        def _mt_get_keys(self, result, keys, depth, ignore_missing=False, prove=False):
-            self._mt_get_keys_common(result, keys, depth, ignore_missing, prove)
+        def _mt_get_keys(self, result, keys, depth, prove):
+            self._mt_get_keys_common(result, keys, depth, prove)
 
             # Whether or not a match is found is irrelevant; the best we can do
             # is return ourselves as we're pruned.

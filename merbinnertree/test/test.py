@@ -153,6 +153,140 @@ class Test_MerbinnerTree(unittest.TestCase):
         with self.assertRaises(ValueError):
             b'' in t0
 
+    def test_prove_contains(self):
+        # Degenerate case: proving an empty tree contains nothing should return
+        # the same tree.
+        tree = TestTree()
+        pruned_tree = tree.prove_contains([])
+        self.assertIs(tree, pruned_tree)
+
+        # As should proving it contains something it doesn't.
+        pruned_tree = tree.prove_contains([k(b'\x00')])
+        self.assertIs(tree, pruned_tree)
+
+        # Add an item to the tree.
+        tree = tree.put(k(b'\x00'), b'a')
+
+        # Proving it contains that item should return the same tree as
+        # prove_contains() doesn't turn full leaves into pruned leaves yet.
+        pruned_tree = tree.prove_contains([k(b'\x00')])
+        self.assertIs(tree, pruned_tree)
+
+        # Proving it contains a key or keys not in the tree, or proving nothing
+        # about what it contains, should always result in a pruned leaf.
+        for contents in ([k(b'\xff')],
+                         [k(b'\xff'), k(b'\x01')],
+                         []):
+            pruned_tree = tree.prove_contains(contents)
+            self.assertIsNot(tree, pruned_tree)
+            self.assertEqual(tree.hash, pruned_tree.hash)
+            self.assertNotIn(k(b'\xff'), tree)
+            self.assertNotIn(k(b'\xff'), pruned_tree)
+            self.assertIsInstance(pruned_tree, TestTree.PrunedLeafNodeClass)
+
+        # Add another item, resulting in tree being an inner node
+        tree = tree.put(k(b'\xff'), b'b')
+
+        # Proving either key should result in a tree with the other side
+        # pruned.
+        pruned_tree = tree.prove_contains([k(b'\x00')])
+        self.assertEqual(tree.hash, pruned_tree.hash)
+        self.assertIn(k(b'\x00'), pruned_tree)
+        self.assertIsInstance(pruned_tree, TestTree.InnerNodeClass)
+        self.assertIsInstance(pruned_tree.left, TestTree.PrunedLeafNodeClass)
+        self.assertIs(pruned_tree.right, tree.right)
+
+        pruned_tree = tree.prove_contains([k(b'\xff')])
+        self.assertEqual(tree.hash, pruned_tree.hash)
+        self.assertIn(k(b'\xff'), pruned_tree)
+        self.assertIsInstance(pruned_tree, TestTree.InnerNodeClass)
+        self.assertIsInstance(pruned_tree.right, TestTree.PrunedLeafNodeClass)
+        self.assertIs(pruned_tree.left, tree.left)
+
+        # Proving tree contains both keys in the tree should result in the same
+        # tree.
+        pruned_tree = tree.prove_contains([k(b'\x00'), k(b'\xff')])
+        self.assertIs(tree, pruned_tree)
+
+        # As should proving both keys and a key the tree doesn't contain.
+        pruned_tree = tree.prove_contains([k(b'\x00'), k(b'\xff'), k(b'\x11')])
+        self.assertIs(tree, pruned_tree)
+
+        # Proving the tree contains a key it doesn't means we need the
+        # corresponding path.
+        #
+        # Since this tree is just an inner with two leafs as children,
+        # everything we try to prove results in the same thing: an inner with
+        # two pruned leaves.
+        for contents in ([k(b'\x80')],
+                         [k(b'\x01')],
+                         [k(b'\x80'), k(b'\x01')]):
+            pruned_tree = tree.prove_contains(contents)
+            self.assertEqual(tree.hash, pruned_tree.hash)
+            self.assertIsInstance(pruned_tree.left, TestTree.PrunedLeafNodeClass)
+            self.assertEqual(pruned_tree.left.key, tree.left.key)
+            self.assertIsInstance(pruned_tree.right, TestTree.PrunedLeafNodeClass)
+            self.assertEqual(pruned_tree.right.key, tree.right.key)
+            self.assertNotIn(k(b'\x80'), pruned_tree)
+            self.assertNotIn(k(b'\x01'), pruned_tree)
+
+        # However the degenerate case of proving nothing about what it contains
+        # results in a pruned inner node.
+        pruned_tree = tree.prove_contains([])
+        self.assertEqual(tree.hash, pruned_tree.hash)
+        self.assertIsInstance(pruned_tree, TestTree.PrunedInnerNodeClass)
+
+        # Add a third key. This time we collide 4 bits deep on the left to test
+        # out the case where a pruned tree has inner nodes with empty nodes
+        # children.
+        tree = tree.put(k(b'\xf0'), b'c')
+
+        # Degenerate case again
+        pruned_tree = tree.prove_contains([])
+        self.assertEqual(tree.hash, pruned_tree.hash)
+        self.assertIsInstance(pruned_tree, TestTree.PrunedInnerNodeClass)
+
+        # Again, proving all three keys results in the exact same object.
+        pruned_tree = tree.prove_contains([k(b'\x00'), k(b'\xf0'), k(b'\xff')])
+        self.assertIs(tree, pruned_tree)
+
+        # Or three keys and a non-existent key
+        pruned_tree = tree.prove_contains([k(b'\x00'), k(b'\xf0'), k(b'\xff'), k(b'\xf0\xff')])
+        self.assertIs(tree, pruned_tree)
+
+        # Proving both keys on the left side should re-use the tree.left
+        # object.
+        pruned_tree = tree.prove_contains([k(b'\xf0'), k(b'\xff')])
+        self.assertIsNot(tree, pruned_tree)
+        self.assertIs(tree.left, pruned_tree.left)
+        self.assertIsInstance(pruned_tree.right, TestTree.PrunedLeafNodeClass)
+
+        # Or both keys and a bunch of other missing keys on the left side.
+        contents = [k(b'\xf0'), k(b'\xff'),
+                    k(b'\xf1'), k(b'\xff\xff')] # missing
+        pruned_tree = tree.prove_contains(contents)
+        self.assertIsNot(tree, pruned_tree)
+        self.assertIs(tree.left, pruned_tree.left)
+        self.assertIsInstance(pruned_tree.right, TestTree.PrunedLeafNodeClass)
+
+        for key in contents:
+            self.assertEqual(key in pruned_tree, key in tree)
+
+        # Prove a missing key whose path would be tree.left.right if it were
+        # added.
+        pruned_tree = tree.prove_contains([k(b'\xbf')])
+        self.assertNotIn(k(b'\xbf'), pruned_tree)
+
+        # Because its path dead ends quickly, very little of the original tree
+        # needs to be retained to prove that it doesn't exist.
+        self.assertIsInstance(pruned_tree.right, TestTree.PrunedLeafNodeClass)
+        self.assertIsInstance(pruned_tree.left.left, TestTree.PrunedInnerNodeClass)
+        self.assertIsInstance(pruned_tree.left.right, TestTree.EmptyNodeClass)
+
+    def test_pruned_errors(self):
+        """Impossible operations on pruned trees fail correctly"""
+        # FIXME
+
     def test_remove(self):
         t0 = TestTree()
 
@@ -200,7 +334,8 @@ class Test_MerbinnerTree(unittest.TestCase):
 
         self.assertEqual(t4.hash, t0.hash)
 
-    def test_random_puts_removes(self):
+    def test_random_contents(self):
+        """Trees with randomized contents and operations"""
         expected_contents = set()
 
         tree = TestTree()
@@ -243,6 +378,25 @@ class Test_MerbinnerTree(unittest.TestCase):
                 non_key = os.urandom(32)
                 self.assertNotIn(non_key, tree)
 
+        def check_prove_contains(n_exist, n_not_exist):
+            """Check prove_contains() on random subsets of the tree
+
+            n_exist     - # of existing keys to include
+            n_not_exist - # of non-existing keys to include
+            """
+            expected_dict = dict(expected_contents)
+            exist_subset = list(expected_dict.keys())[0:n_exist]
+
+            non_existing_keys = [os.urandom(32) for i in range(n_not_exist)]
+
+            pruned_tree = tree.prove_contains(exist_subset + non_existing_keys)
+
+            for existing_key in exist_subset:
+                self.assertEqual(pruned_tree[existing_key], expected_dict[existing_key])
+
+            for non_existing_key in non_existing_keys:
+                self.assertNotIn(non_existing_key, pruned_tree)
+
         n = 1000
         grow(1.0, n)
         check()
@@ -252,6 +406,21 @@ class Test_MerbinnerTree(unittest.TestCase):
 
         modify(n)
         check()
+
+        # Test that we can prove every single key in the tree exists and get
+        # its value back
+        for key, value in expected_contents:
+            pruned_tree = tree.prove_contains([key])
+            self.assertEqual(pruned_tree[key], value)
+
+        # Test random subsets with multiple keys in them
+        for i in range(10):
+            check_prove_contains(n//32, 0)
+            check_prove_contains(n//2,  0)
+            check_prove_contains(n//32, n//32)
+            check_prove_contains(n//2,  n//2)
+            check_prove_contains(0,  n//32)
+            check_prove_contains(0,  n//2)
 
         # delete everything and check that we end up with an empty node
         for k,v in expected_contents:
