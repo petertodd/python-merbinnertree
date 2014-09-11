@@ -1,7 +1,7 @@
 python-merbinnertree
 ====================
 
-This Python3 library implements a form of Merklized Binary Radix Tree called a
+This Python3 library implements a form of Merklized Binary Prefix Tree called a
 "Merbinner Tree". Like a standard merkle tree a Merbinner Tree is a
 cryptographic data structure that securely and efficiently commits a set of
 items such that the existence of a given item in the set can be efficiently
@@ -30,7 +30,7 @@ Design Goals
   an adversary.
 
 
-Why not pure merkle binary radix tree? Makes things simplier, but requires
+Why not pure merkle binary prefix tree? Makes things simplier, but requires
 about an order of magnitude more hashes. (e.g. 20bit ~= 1million items vs
 256bit)
 
@@ -77,7 +77,7 @@ Update one tree with another.
 Postfix Key Compression
 =======================
 
-Compromise between a standard radix tree and a pure merkle binary radix tree.
+Compromise between a standard radix tree and a pure merkle binary prefix tree.
 When keys are hashes it's infeasible to find long collisions, limiting maximum
 proof size, good engineering. Also radix key compression becomes useless.
 
